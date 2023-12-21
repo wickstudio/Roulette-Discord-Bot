@@ -1,16 +1,18 @@
 require('dotenv').config();
 const { ButtonBuilder, EmbedBuilder, ButtonStyle, CommandInteraction, AttachmentBuilder, REST, Routes } = require('discord.js');
-const { createButtonRows, editButton, commands, emojis } = require('./utils.js');
-const { startTime, chooseTimeout } = require('./config.json');
+const { createButtonRows, editButton, commands, emojis, sleep } = require('./utils.js');
+const { startTime, chooseTimeout, timeBetweenRounds } = require('./config.json');
 const { createWheel } = require('./wheel.js');
 const Discord = require('discord.js');
 const http = require('http');
-http.createServer(function(req, res) {
-  res.write("I'm alive");
-  res.end();
-}).listen(8080);
+http
+  .createServer(function (req, res) {
+    res.write("I'm alive");
+    res.end();
+  })
+  .listen(8080);
 const client = new Discord.Client({
-  intents: [Discord.IntentsBitField.Flags.Guilds]
+  intents: [Discord.IntentsBitField.Flags.Guilds],
 });
 
 const Games = new Map();
@@ -23,10 +25,7 @@ client.on('ready', async () => {
     console.log(`Started refreshing ${commands.length} application (/) commands.`);
 
     // The put method is used to fully refresh all commands in the guild with the current set
-    const data = await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands },
-    );
+    const data = await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 
     console.log(`Successfully reloaded ${data.length} application (/) commands.`);
   } catch (error) {
@@ -36,11 +35,9 @@ client.on('ready', async () => {
 
   console.log('I am ready!');
   console.log('Bot By Wick Studio');
-  console.log('discord.gg/wicks');
 });
 
 client.on('interactionCreate', async (interaction) => {
-
   if (interaction.isCommand()) {
     if (interaction.commandName == 'roulette') {
       if (await Games.get(interaction.guildId)) {
@@ -59,11 +56,11 @@ client.on('interactionCreate', async (interaction) => {
           },
           {
             name: '__Game Starts In__:',
-            value: `**<t:${Math.floor((Date.now() + (startTime * 1000)) / 1000)}:R>**`,
+            value: `**<t:${Math.floor((Date.now() + startTime * 1000) / 1000)}:R>**`,
           }
         );
 
-      const buttons = Array.from(Array(20).keys()).map(i =>
+      const buttons = Array.from(Array(20).keys()).map((i) =>
         new ButtonBuilder()
           .setCustomId(`join_${i + 1}_roulette`)
           .setStyle(ButtonStyle.Secondary)
@@ -71,15 +68,9 @@ client.on('interactionCreate', async (interaction) => {
       );
 
       // New buttons
-      const randomButton = new ButtonBuilder()
-        .setCustomId(`join_random_roulette`)
-        .setLabel('Join Randomly')
-        .setStyle(ButtonStyle.Success);
+      const randomButton = new ButtonBuilder().setCustomId(`join_random_roulette`).setLabel('Join Randomly').setStyle(ButtonStyle.Success);
 
-      const leaveButton = new ButtonBuilder()
-        .setCustomId(`leave_roulette`)
-        .setLabel('Leave the Game')
-        .setStyle(ButtonStyle.Danger);
+      const leaveButton = new ButtonBuilder().setCustomId(`leave_roulette`).setLabel('Leave the Game').setStyle(ButtonStyle.Danger);
 
       const rows = createButtonRows([...buttons, randomButton, leaveButton]);
       await interaction.reply({
@@ -87,14 +78,13 @@ client.on('interactionCreate', async (interaction) => {
         components: rows,
         embeds: [embed],
       });
-      Games.set(interaction.guildID, { players: [] })
+      Games.set(interaction.guildID, { players: [] });
       const repliedMessage = await interaction.fetchReply();
       setTimeout(async () => {
         repliedMessage.embeds[0].fields[1].value = `\`\`\`Started\`\`\``;
-        repliedMessage.edit({ components: [], embeds: [repliedMessage.embeds[0]] })
-        await interaction.channel.send({ content: `✅ | Numbers were distributed to each player. The first round will start in a few seconds...` })
-        startGame(interaction)
-      }, startTime * 1000)
+        repliedMessage.edit({ components: [], embeds: [repliedMessage.embeds[0]] });
+        startGame(interaction, true);
+      }, startTime * 1000);
     }
   } else if (interaction.customId.startsWith('join')) {
     // Destructure the custom ID into separate variables
@@ -119,7 +109,7 @@ client.on('interactionCreate', async (interaction) => {
       // Get avalibe random button number
       do {
         number = Math.floor(Math.random() * 20) + 1;
-      } while (savedGame.players.some(player => player.buttonNumber == number));
+      } while (savedGame.players.some((player) => player.buttonNumber == number));
     }
 
     if (savedGame.players.some((user) => user.buttonNumber === number)) {
@@ -132,8 +122,8 @@ client.on('interactionCreate', async (interaction) => {
       buttonNumber: number,
       username: interaction.user.username,
       avatar: interaction.user.displayAvatarURL({ size: 256, extension: 'png' }),
-      color: interaction.user.hexAccentColor
-    })
+      color: interaction.user.hexAccentColor,
+    });
     Games.set(interaction.guildId, savedGame);
 
     // Edit the button label and disable it with the user's username
@@ -142,7 +132,6 @@ client.on('interactionCreate', async (interaction) => {
 
     // Send a confirmation message indicating successful joining
     interaction.reply({ content: 'Joined successfully!', ephemeral: true });
-
   } else if (interaction.customId.startsWith('leave')) {
     // Retrieve the saved game based on guild ID
     const savedGame = await Games.get(interaction.guildID);
@@ -190,7 +179,7 @@ client.on('interactionCreate', async (interaction) => {
     }
     // Remove the user from the game
     savedGame.players = savedGame.players.filter((player) => player.user != interaction.user.id);
-    savedGame.winner.id = ''
+    savedGame.winner.id = '';
 
     await Games.set(interaction.guildId, savedGame);
 
@@ -201,7 +190,7 @@ client.on('interactionCreate', async (interaction) => {
     // Start the next round of the game
     startGame(interaction);
   } else if (interaction.customId.startsWith('kick_')) {
-    const [, kickedUser] = interaction.customId.split("_");
+    const [, kickedUser] = interaction.customId.split('_');
 
     const savedGame = await Games.get(interaction.guildId);
     // If no game is found, send a reply indicating no game running in this server
@@ -221,7 +210,7 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
     savedGame.players = savedGame.players.filter((player) => player.user != kickedUser);
-    savedGame.winner.id = ''
+    savedGame.winner.id = '';
 
     interaction.reply({ content: 'Player has been kicked from the game.', ephemeral: true });
     interaction.channel.send(`💣 | <@${kickedUser}> has been kicked from the game, the next round will start in a few seconds...`);
@@ -229,63 +218,64 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-
 /**
- * @param {CommandInteraction} interaction 
+ * @param {CommandInteraction} interaction
  */
-const startGame = async (interaction) => {
-  const { players } = await Games.get(interaction.guildId);
+const startGame = async (interaction, start = false) => {
+  const { players } = (await Games.get(interaction.guildId)) || { players: [] };
   if (players.length == 0) {
+    await sleep(5);
     // Send a message indicating that the game has been canceled due to no players
-    interaction.reply({ content: 'Game canceled: There are no players.' });
+    interaction.channel.send({ content: ':x: Game canceled: There are no players.' });
     return;
   }
-  const colorsGradient = [
-    '#32517f',
-    '#4876a3',
-    '#5d8ec7',
-    '#74a6eb',
-    '#8ac0ff'
-  ];
+  if (start) {
+    await interaction.channel.send({
+      content: `✅ | Numbers were distributed to each player. The first round will start in a few seconds...`,
+    });
+  }
+  await sleep(timeBetweenRounds);
+  const colorsGradient = ['#32517f', '#4876a3', '#5d8ec7', '#74a6eb', '#8ac0ff'];
 
   const options = players.map((user, index) => ({
     user: user,
     label: user.username,
-    color: colorsGradient[index % colorsGradient.length]
+    color: colorsGradient[index % colorsGradient.length],
   }));
 
   const winnerOption = options[Math.floor(Math.random() * options.length)];
   const winnerIndex = options.indexOf(winnerOption);
   options[winnerIndex] = {
     ...winnerOption,
-    winner: true
+    winner: true,
   };
 
   const savedData = await Games.get(interaction.guildId);
-  const time = Date.now() + (chooseTimeout * 1000)
-  savedData.winner = { id: winnerOption.user.user, until: time }
-  await Games.set(interaction.guildId, savedData)
-  const image = await createWheel(options, winnerOption.user.avatar)
+  const time = Date.now() + chooseTimeout * 1000;
+  savedData.winner = { id: winnerOption.user.user, until: time };
+  await Games.set(interaction.guildId, savedData);
+  const image = await createWheel(options, winnerOption.user.avatar);
 
-  const buttons = players.filter((user) => user.username != winnerOption.label).map((user) => (
-    new ButtonBuilder()
-      .setCustomId(`kick_${user.user}`)
-      .setStyle(ButtonStyle.Secondary)
-      .setLabel(user.username)
-      .setEmoji(emojis[Number(user.buttonNumber) - 1])
-  ));
+  const buttons = players
+    .filter((user) => user.username != winnerOption.label)
+    .map((user) =>
+      new ButtonBuilder()
+        .setCustomId(`kick_${user.user}`)
+        .setStyle(ButtonStyle.Secondary)
+        .setLabel(user.username)
+        .setEmoji(emojis[Number(user.buttonNumber) - 1])
+    );
 
-  const leaveButton = new ButtonBuilder()
-    .setCustomId(`withdrawal`)
-    .setLabel('Withdrawal')
-    .setStyle(ButtonStyle.Danger);
+  const leaveButton = new ButtonBuilder().setCustomId(`withdrawal`).setLabel('Withdrawal').setStyle(ButtonStyle.Danger);
 
   const rows = createButtonRows([...buttons, leaveButton]);
 
-  const attachment = new AttachmentBuilder(image, { name: 'wheel.png' })
+  const attachment = new AttachmentBuilder(image, { name: 'wheel.png' });
 
   if (players.length <= 2) {
-    const embed = new EmbedBuilder().setImage('attachment://wheel.png').setColor('#4876a3')
+    const embed = new EmbedBuilder()
+      .setImage('attachment://wheel.png')
+      .setColor('#4876a3')
       .setDescription(`**:crown: This is the last round! The chosen player is the winning player of the game.**`);
     await interaction.channel.send({
       content: `**${winnerOption.user.buttonNumber} - <@${winnerOption.user.user}> **`,
@@ -293,15 +283,16 @@ const startGame = async (interaction) => {
       files: [attachment],
     });
     await Games.delete(interaction.guildId);
-
   } else {
-    const embed = new EmbedBuilder().setImage('attachment://wheel.png').setColor('#4876a3')
+    const embed = new EmbedBuilder()
+      .setImage('attachment://wheel.png')
+      .setColor('#4876a3')
       .setDescription(`**⏰ | You have ${chooseTimeout} seconds to choose a player to send off**`);
     await interaction.channel.send({
       content: `**${winnerOption.user.buttonNumber} - <@${winnerOption.user.user}> **`,
       embeds: [embed],
       files: [attachment],
-      components: rows
+      components: rows,
     });
     setTimeout(async () => {
       const checkUser = await Games.get(interaction.guildId);
@@ -313,13 +304,15 @@ const startGame = async (interaction) => {
         await Games.set(interaction.guildId, checkUser);
 
         // Send a message to the channel indicating that the user has been kicked for timeout
-        interaction.channel.send(`⏰ | <@${winnerOption.user.user}> has been kicked from the game due to timeout. The next round will start shortly...`);
+        interaction.channel.send(
+          `⏰ | <@${winnerOption.user.user}> has been kicked from the game due to timeout. The next round will start shortly...`
+        );
 
         // Start the next round of the game
         startGame(interaction);
       }
     }, chooseTimeout * 1000);
   }
-}
+};
 
 client.login(process.env.TOKEN);
