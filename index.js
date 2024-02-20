@@ -315,4 +315,4 @@ const startGame = async (interaction, start = false) => {
   }
 };
 
-client.login(process.env.TOKEN);
+client.login("MTIwMjcyMjIwODQ4OTY3NjgyMQ.Grm6bE.3qtoE705YXcQFo2TDbD3YkHHM7N4kFtEzWP3lA")
